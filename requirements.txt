@@ -3,3 +3,8 @@ matplotlib
 pandas
 operation
 openpyxl
+operator
+shapefile
+shapely
+math
+descartes
