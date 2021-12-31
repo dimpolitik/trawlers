@@ -2,6 +2,7 @@ numpy
 matplotlib
 pandas
 openpyxl
+operator
 shapefile
 shapely
 math
