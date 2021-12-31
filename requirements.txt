@@ -1,7 +1,6 @@
 numpy
 matplotlib
 pandas
-operation
 openpyxl
 operator
 shapefile
