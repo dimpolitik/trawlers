@@ -10,13 +10,19 @@ Created on Tue Dec 28 11:20:59 2021
 # https://carpentries-incubator.github.io/python-interactive-data-visualizations/07-add-widgets/index.html
 # https://docs.streamlit.io/library/api-reference/layout/st.expander
 # https://towardsdatascience.com/deploying-a-web-app-with-streamlit-sharing-c320c79ae350
-
 # https://share.streamlit.io/dimpolitik/trawlers/main/myapp.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from operator import itemgetter
+import shapefile as shp
+from shapely.geometry import Polygon
+from descartes.patch import PolygonPatch
+import math
+
+st.set_page_config(layout="wide")
 
 # Functions
 def land_profiles(df_input, gear, cols_LLS):
@@ -109,9 +115,7 @@ def load_data():
 
 df = load_data()
 
-st.write("""
-     ## Visualisation of trawlers landing data in the Ionian Sea
-     """)
+st.title('Visualisation of trawlers landing data in the Ionian Sea')
 
 st.markdown("Explore landing data in the Ionian Sea, Greece")
             #"HCMR")
@@ -119,7 +123,7 @@ st.markdown("Explore landing data in the Ionian Sea, Greece")
 # user choices
 with st.sidebar:
     st.subheader("Select")
-    area = st.sidebar.selectbox('Region', [None, "North Ionion","Central Ionion","South Ionion"])
+    area = st.sidebar.selectbox('Region', [None, "North Ionion", "Central Ionion", "South Ionion"])
     mesh_size = st.sidebar.selectbox('Mesh size', [None, 40,50])
       
     df_q = df.copy()
@@ -133,55 +137,199 @@ with st.sidebar:
         elif (depth == '> 350 m'):
             df_q = df_q[ (df_q['DEPTH_ST'] > 350) & (df_q['DEPTH_END'] > 350)]  
         
-    select_species = st.multiselect('Species', list(set(df_q['SPECIES'])))
+    select_species = st.multiselect('Species (multiple choices)', sorted(list(set(df_q['SPECIES']))))
+    
+    lst_species = sorted(list(set(df_q['SPECIES'])))
+    lst_species.insert(0, 'None')
+    
+    species_spatial = st.sidebar.selectbox('Species for spatial plot (one option each time)', lst_species) 
 
-months, day_nights, species, discards, eue, shannon_com, shannon_disc, dinit, dend, land, disc, sp_depth_st, sp_depth_end = metier_metanal(df_q)
+    st.image('urk-fishing-trawlers.jpg')
+
+    months, day_nights, species, discards, eue, shannon_com, shannon_disc, dinit, dend, land, disc, sp_depth_st, sp_depth_end = metier_metanal(df_q)
 
 if mesh_size is not None:
     
-     # Species plots
-    if len(select_species) > 0:        
-        # ------------------------------------------ #
-        st.subheader('Selected species')      
-        fig, ax = plt.subplots(figsize=(6,4))
-        desired_order_list = select_species
-        v1 = {k: land[k] for k in desired_order_list}
-        v2 = {k: disc[k] for k in desired_order_list}
-        X = np.arange(len(v1))
-        ax.bar(X, 100 * np.array(list(v1.values())) / ( np.array(list(v1.values()))+ np.array(list(v2.values()))), width=0.75, color="blue", alpha=0.8, bottom=0, align='center')
-        ax.bar(X, 100 * np.array(list(v2.values())) / ( np.array(list(v1.values()))+ np.array(list(v2.values()))), width=0.75, color="orange", alpha=0.8, bottom=100 * np.array(list(v1.values())) / ( np.array(list(v1.values()))+ np.array(list(v2.values()))), align='center')
-        ax.legend(['Landings rate', 'Discards rate'])
-        plt.xticks(X, v1.keys())
-        ax.set_xticklabels(v1.keys(), rotation = 90) # size =12
-        ax.grid(axis='y')
+    col1, col2, col3  = st.columns(3)
+    
+    with col1:
+        st.subheader('Landings per month')      
+        fig, ax = plt.subplots() #figsize=(8,5)
+        keys = months.keys()
+        values = months.values()
+        ax.bar(keys, values)
+        plt.xticks(np.arange(1, 13))
         ax.set_ylabel('Percentage (%)')
-        plt.setp(ax.xaxis.get_majorticklabels(), ha='right')     
+        ax.set_xlabel('Month')
         st.pyplot(fig)
     
-        # ------------------------------------------- #
-        st.subheader('Depth start/end for selected species')      
-        fig, (ax1, ax2) = plt.subplots(2, figsize=(8,6))
-        desired_order_list1 = select_species
-        v1 = {k: sp_depth_st[k] for k in desired_order_list1}
-        v2 = {k: sp_depth_end[k] for k in desired_order_list1}
-        
-        labels1, data1 = v1.keys(), v1.values()
-        labels2, data2 = v2.keys(), v2.values()
-        
-        X = np.arange(1, len(labels1)+1)
-        plt.subplot(2, 1, 1)
-        plt.boxplot(data1, showfliers=False)
-        plt.xticks(X, labels1)
-        plt.grid(axis='y')
-        plt.ylabel('Depth start')
-               
-        plt.subplot(2, 1, 2)
-        X = np.arange(1, len(labels2)+1)
-        plt.boxplot(data2, showfliers=False)
-        plt.xticks(X, labels2)
-        plt.grid(axis='y')
-        plt.ylabel('Depth end')
+    with col2:
+        st.subheader('Starting depth of landings')      
+        fig, ax = plt.subplots()
+        plt.hist(dinit, bins =[25,50,75,100,125,150,200,300,600])
+        ax.set_xlabel('Meters')
+        ax.set_ylabel('Frequency')
         st.pyplot(fig)
+    
+    with col3:
+        st.subheader('Ending depth of landings')      
+        fig, ax = plt.subplots() 
+        plt.hist(dend, bins =[25,50,75,100,125,150,200,300,600])  
+        ax.set_xlabel('Meters')
+        ax.set_ylabel('Frequency')
+        st.pyplot(fig)
+            
+    # Species plots
+    if len(select_species) > 0: 
+        desired_order_list1 = select_species
+        desired_order_list = select_species
+        
+        v1 = {k: land[k] for k in desired_order_list}
+        v2 = {k: disc[k] for k in desired_order_list}
+        
+        v3 = {k: sp_depth_st[k] for k in desired_order_list1}
+        v4 = {k: sp_depth_end[k] for k in desired_order_list1}
+        
+        labels1, data1 = v3.keys(), v3.values()
+        labels2, data2 = v4.keys(), v4.values()
+                      
+        col1, col2, col3  = st.columns(3)
+        
+        with col1:
+            st.subheader('Selected species')      
+            fig, ax = plt.subplots()
+            X = np.arange(len(v1))
+            ax.bar(X, 100 * np.array(list(v1.values())) / ( np.array(list(v1.values()))+ np.array(list(v2.values()))), width=0.75, color="blue", alpha=0.8, bottom=0, align='center')
+            ax.bar(X, 100 * np.array(list(v2.values())) / ( np.array(list(v1.values()))+ np.array(list(v2.values()))), width=0.75, color="orange", alpha=0.8, bottom=100 * np.array(list(v1.values())) / ( np.array(list(v1.values()))+ np.array(list(v2.values()))), align='center')
+            ax.legend(['Landings rate', 'Discards rate'])
+            plt.xticks(X, v1.keys())
+            ax.set_xticklabels(v1.keys(), rotation = 60) # size =12
+            ax.grid(axis='y')
+            ax.set_ylabel('Percentage (%)')
+            plt.setp(ax.xaxis.get_majorticklabels(), ha='right')     
+            st.pyplot(fig)
+            plt.savefig('test.jpg')   # <-- save first
+
+        
+        with col2:       
+            st.subheader('Starting depth')           
+            fig, ax = plt.subplots()   
+            X = np.arange(1, len(labels1)+1)
+            plt.boxplot(data1, showfliers=False)
+            plt.xticks(X, labels1, rotation=60)
+            plt.grid(axis='y')
+            #plt.ylim([dmin, dmax])
+            plt.ylabel('Depth start (m)')
+            st.pyplot(fig)
+         
+        with col3:
+            st.subheader('End depth')
+            fig, ax = plt.subplots()
+            X = np.arange(1, len(labels2)+1)
+            plt.boxplot(data2, showfliers=False)
+            plt.xticks(X, labels2, rotation=60)
+            plt.grid(axis='y')
+            #plt.ylim([dmin, dmax])
+            plt.ylabel('Depth end (m)')
+            st.pyplot(fig)
+     
+    if (species_spatial != 'None'):
+        df_sp = df_q.copy()
+        df_sp = df_sp.loc[df_sp['SPECIES'] == species_spatial]
+        
+        
+        xstep=0.1
+        ystep=0.1
+        xxleft=19
+        yybot=36
+        im=math.floor((24.5-19)/xstep) + 1
+        jm=math.floor((40-36)/xstep) + 1
+        aloni =  np.zeros((jm,im))
+        alati =  np.zeros((jm,im))
+        pop =  np.zeros((jm,im))
+        for i in range(im):
+            for j in range(jm):
+                aloni[j,i]=xxleft+ i*xstep
+                alati[j,i]=yybot+ j*ystep
+                pop[j,i]= 0
+        
+        st.subheader('Spatial landings for ' + species_spatial)  
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig, ax = plt.subplots()
+            
+            #ax.set_aspect('equal')
+            
+            sf = shp.Reader('./coastLine/coastLine.shp')
+            
+            for shape in sf.shapeRecords():
+                
+                # end index of each components of map
+                l = shape.shape.parts
+                
+                len_l = len(l)  # how many parts of countries i.e. land and islands
+                x = [i[0] for i in shape.shape.points[:]] # list of latitude
+                y = [i[1] for i in shape.shape.points[:]] # list of longitude
+            
+                l.append(len(x)) # ensure the closure of the last component
+                for k in range(len_l):
+                    # draw each component of map.
+                    # l[k] to l[k + 1] is the range of points that make this component
+                    plt.plot(x[l[k]:l[k + 1]],y[l[k]:l[k + 1]], 'k-') 
+                    plt.fill(x[l[k]:l[k + 1]],y[l[k]:l[k + 1]], 'black', alpha=0.3)
+            plt.xlim([19.0, 23])
+            plt.ylim([36, 40])
+
+            sp_sum = df_sp.groupby(['LONGITUDE_ST','LATITUDE_ST'])['CATCH_GR'].sum()
+            df_lon_lat = sp_sum.to_frame()
+            df_lon_lat.reset_index(inplace=True)
+            df_lon_lat.columns = ['LONGITUDE_ST',  'LATITUDE_ST', 'Catch']
+            plt.scatter(df_lon_lat['LONGITUDE_ST']/10000, df_lon_lat['LATITUDE_ST']/10000, c = df_lon_lat['Catch'], cmap=plt.cm.get_cmap("jet", 256))
+            plt.colorbar()
+            st.pyplot(fig)
+            
+            with col2:
+                fig, ax = plt.subplots()
+                for index, row in df_lon_lat.iterrows():
+                    iloc= math.floor((row['LONGITUDE_ST']/10000-xxleft)/xstep)
+                    jloc= math.floor((row['LATITUDE_ST']/10000-yybot)/ystep)
+                    pop[jloc,iloc]= pop[jloc,iloc] + row['Catch']
+                    
+                #st.write(pop)
+                pop[pop == 0] = 'nan' 
+                
+                sf = shp.Reader('./coastLine/coastLine.shp')
+                #ax.set_aspect('equal')
+                for shape in sf.shapeRecords():
+                    
+                    # end index of each components of map
+                    l = shape.shape.parts
+                    
+                    len_l = len(l)  # how many parts of countries i.e. land and islands
+                    x = [i[0] for i in shape.shape.points[:]] # list of latitude
+                    y = [i[1] for i in shape.shape.points[:]] # list of longitude
+                
+                    l.append(len(x)) # ensure the closure of the last component
+                    for k in range(len_l):
+                        # draw each component of map.
+                        # l[k] to l[k + 1] is the range of points that make this component
+                        plt.plot(x[l[k]:l[k + 1]],y[l[k]:l[k + 1]], 'k-') 
+                        plt.fill(x[l[k]:l[k + 1]],y[l[k]:l[k + 1]], 'black', alpha=0.3)
+                                
+                plt.pcolor(aloni + xstep/2, alati + ystep/2, np.log10(pop+1), edgecolors='k', cmap = plt.cm.get_cmap("jet", 256), shading = 'auto')
+                clb = plt.colorbar()
+                clb.set_label('log-form')
+                plt.xlim([19.0, 23])
+                plt.ylim([36, 40])
+                st.pyplot(fig)
+                
+    #df =bb.to_frame()
+    #df.reset_index(inplace=True)
+    #df.columns = ['LONGITUDE_ST',  'LATITUDE_ST', 'Catch']
+    #plt.scatter(df['LONGITUDE_ST']/10000, df['LATITUDE_ST']/10000, c = df['Catch']/1000, cmap=plt.cm.get_cmap("jet", 256))
+    #plt.colorbar()
+    #plt.clim(0,600)
     
     #st.subheader('Landing profiles & Discards')      
     #fig, ax = plt.subplots(figsize=(18,16))
@@ -202,27 +350,4 @@ if mesh_size is not None:
     #plt.pie(values, labels=labels, autopct='%1.1f%%', normalize = False, textprops={'fontsize': 12})
     #ax.set_ylabel('%')
     #st.pyplot(fig)
-        
-    
-    st.subheader('Landings per month')      
-    fig, ax = plt.subplots(figsize=(8,5))
-    keys = months.keys()
-    values = months.values()
-    plt.bar(keys, values)
-    plt.xticks(np.arange(1, 13))
-    ax.set_ylabel('%')
-    ax.set_xlabel('Month')
-    st.pyplot(fig)
-    
-    st.subheader('depth of landings (START and END)')      
-    fig, ax = plt.subplots(figsize=(12,4))
-    plt.subplot(1, 2, 1)
-    plt.hist(dinit, bins =[25,50,75,100,125,150,200,300,600])
-    ax.set_xlabel('Meters')
-    #ax.set_title('Starting Depth')
-    plt.subplot(1, 2, 2)
-    plt.hist(dend, bins =[25,50,75,100,125,150,200,300,600])
-    ax.set_xlabel('Meters')
-    #ax.set_title('End Depth')
-    st.pyplot(fig)
- 
+   
