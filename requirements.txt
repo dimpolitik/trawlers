@@ -2,7 +2,7 @@ numpy
 matplotlib
 pandas
 openpyxl
-shapefile
+pyshp
 shapely
 math
 descartes
