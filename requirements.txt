@@ -4,5 +4,4 @@ pandas
 openpyxl
 pyshp
 shapely
-math
 descartes
