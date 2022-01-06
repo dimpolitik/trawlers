@@ -261,7 +261,7 @@ if mesh_size is not None:
             
             #ax.set_aspect('equal')
             
-            sf = shp.Reader('./coastLine/coastLine.shp')
+            sf = shp.Reader('coastLine.shp')
             
             for shape in sf.shapeRecords():
                 
