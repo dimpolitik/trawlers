@@ -299,7 +299,7 @@ if mesh_size is not None:
                 #st.write(pop)
                 pop[pop == 0] = 'nan' 
                 
-                sf = shp.Reader('./coastLine/coastLine.shp')
+                sf = shp.Reader('coastLine.shp')
                 #ax.set_aspect('equal')
                 for shape in sf.shapeRecords():
                     
